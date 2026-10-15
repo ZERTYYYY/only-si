@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow">
+<title>ONLY SI — Accès protégé</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wght@700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{min-height:100vh;display:grid;place-items:center;background:#f5f3ef;color:#16181b;font-family:Inter,system-ui,sans-serif;padding:16px}
+  .box{width:100%;max-width:400px;background:#fff;border:1px solid #dedad3;padding:40px 32px}
+  .logo{font-family:Archivo,sans-serif;font-weight:800;font-size:22px;letter-spacing:.04em;display:flex;align-items:center;gap:10px;margin-bottom:28px}
+  .logo span{width:34px;height:34px;background:#16181b;color:#f5f3ef;display:grid;place-items:center;font-size:13px;letter-spacing:0}
+  h1{font-family:Archivo,sans-serif;font-size:24px;margin-bottom:6px}
+  p{color:#6d7178;font-size:15px;margin-bottom:24px}
+  label{display:block;font-size:14px;font-weight:600;margin-bottom:8px;color:#3b3f45}
+  input{width:100%;padding:13px 14px;background:#f5f3ef;border:1px solid #dedad3;font:inherit;font-size:16px;border-radius:0;color:#16181b}
+  input:focus{outline:2px solid #b5651d;outline-offset:-1px;background:#fff}
+  button{width:100%;margin-top:14px;padding:14px;background:#b5651d;color:#fff;border:none;font:inherit;font-weight:600;font-size:15px;cursor:pointer}
+  button:hover{background:#8f4e14}
+  button:disabled{opacity:.6;cursor:wait}
+  .err{color:#b42318;font-size:14px;margin-top:12px;min-height:20px}
+</style>
+</head>
+<body>
+<form class="box" id="f">
+  <div class="logo"><span>SI</span>ONLY SI</div>
+  <h1>Accès protégé</h1>
+  <p>Ce site est en cours de validation. Entrez le code d'accès pour le consulter.</p>
+  <label for="pw">Code d'accès</label>
+  <input id="pw" type="password" autocomplete="current-password" autofocus required>
+  <button id="go">Accéder au site</button>
+  <div class="err" id="err" role="alert"></div>
+</form>
+
+<script>
+// Portée isolée : le site déchiffré réutilise la même fenêtre et ses propres noms de variables
+(() => {
+  const DATA = __PAYLOAD__;
+  const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+
+  async function unlock(password) {
+    const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+    const key = await crypto.subtle.deriveKey(
+      {name:'PBKDF2', salt:b64(DATA.s), iterations:DATA.n, hash:'SHA-256'},
+      base, {name:'AES-GCM', length:256}, false, ['decrypt']);
+    const plain = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(DATA.i)}, key, b64(DATA.c));
+    return new TextDecoder().decode(plain);
+  }
+
+  function show(html) {
+    document.open(); document.write(html); document.close();
+  }
+
+  const form = document.getElementById('f'), btn = document.getElementById('go'), err = document.getElementById('err');
+
+  // Évite de redemander le code pendant la même session (onglet ouvert)
+  let saved = null;
+  try { saved = sessionStorage.getItem('onlysi-code'); } catch (e) {}
+  if (saved) unlock(saved).then(show).catch(() => { try { sessionStorage.removeItem('onlysi-code'); } catch (e) {} });
+
+  form.onsubmit = async e => {
+    e.preventDefault();
+    const pw = document.getElementById('pw').value;
+    btn.disabled = true; btn.textContent = 'Vérification…'; err.textContent = '';
+    try {
+      const html = await unlock(pw);
+      try { sessionStorage.setItem('onlysi-code', pw); } catch (e) {}
+      show(html);
+    } catch {
+      err.textContent = 'Code incorrect.';
+      btn.disabled = false; btn.textContent = 'Accéder au site';
+    }
+  };
+})();
+</script>
+</body>
+</html>
